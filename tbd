@@ -1,4 +1,122 @@
-void* ta_teaching() {
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h> // memset
+#include <pthread.h> // pthread_t, pthread_create, pthread_join
+#include <semaphore.h> // sem_init, sem_wait, sem_post
+#include <unistd.h> // sleep()
+#include <time.h>
+
+#define NUM_SEAT 3
+#define SLEEP_MAX 5
+
+// Semaphores
+sem_t sem_stu;
+sem_t sem_ta;
+
+// Mutex
+pthread_mutex_t mutex;
+
+int chair[NUM_SEAT];
+int count = 0; // Number of waiting students
+int next_seat = 0;
+int next_teach = 0;
+
+void rand_sleep(void);
+void* stu_programming(void* stu_id);
+void* ta_teaching(void* arg);
+
+int main(int argc, char **argv) {
+    // Threads
+    pthread_t *students;
+    pthread_t ta;
+
+    int *student_ids;
+    int student_num;
+
+    // Index
+    int i;
+
+    // Get number of students from user
+    printf("How many students? ");
+    scanf("%d", &student_num);
+
+    if (student_num == 0) {
+        printf("TA sleeping, no students! \n");
+        exit(-1);
+    }
+
+    // Initialize
+    students = (pthread_t *)malloc(sizeof(pthread_t) * student_num);
+    student_ids = (int *)malloc(sizeof(int) * student_num);
+    memset(student_ids, 0, student_num * sizeof(int));
+
+    sem_init(&sem_stu, 0, 0);
+    sem_init(&sem_ta, 0, 1);
+
+    // Set random seed
+    srand(time(NULL));
+
+    pthread_mutex_init(&mutex, NULL);
+
+    // Create TA thread
+    pthread_create(&ta, NULL, ta_teaching, NULL);
+
+    // Create student threads
+    for (i = 0; i < student_num; i++) {
+        student_ids[i] = i + 1;
+        pthread_create(&students[i], NULL, stu_programming, (void *)&student_ids[i]);
+    }
+
+    // Wait for threads to finish
+    pthread_join(ta, NULL);
+
+    for (i = 0; i < student_num; i++) {
+        pthread_join(students[i], NULL);
+    }
+
+    // Free memory
+    free(students);
+    free(student_ids);
+
+    return 0;
+}
+
+void* stu_programming(void* stu_id) {
+    int id = *(int *)stu_id;
+
+    printf("[stu] Student %d is leaving for TA office\n", id);
+
+    while (1) {
+        rand_sleep();
+
+        pthread_mutex_lock(&mutex);
+
+        if (count < NUM_SEAT) {
+            chair[next_seat] = id;
+            count++;
+
+            printf("    [stu] Student %d is waiting, seated in the hallway\n", id);
+            printf("Waiting students: [1] %d [2] %d [3] %d\n", chair[0], chair[1], chair[2]);
+            next_seat = (next_seat + 1) % NUM_SEAT;
+
+            pthread_mutex_unlock(&mutex);
+
+            // Wake up TA
+            sem_post(&sem_stu);
+            sem_wait(&sem_ta);
+            break; // Exit loop after being taught
+        } else { // No more chairs
+            pthread_mutex_unlock(&mutex);
+
+            printf("[stu] No more chairs. Student %d is outside the hallway and will be back later\n", id);
+            rand_sleep(); // Wait before trying again
+        }
+    }
+
+    return NULL;
+}
+
+void* ta_teaching(void* arg) {
     while (1) {
         // Check if there are no students waiting and sleep if true
         pthread_mutex_lock(&mutex);
@@ -20,16 +138,23 @@ void* ta_teaching() {
             count--;  // Decrease the number of waiting students
 
             // Print the current state of waiting students
-            printf("waiting students : [1] %d [2] %d [3] %d\n", chair[0], chair[1], chair[2]);
+            printf("Waiting students: [1] %d [2] %d [3] %d\n", chair[0], chair[1], chair[2]);
             next_teach = (next_teach + 1) % NUM_SEAT;  // Update the index of the next student to be taught
 
             pthread_mutex_unlock(&mutex);  // Unlock the mutex
 
             rand_sleep();  // Simulate time spent teaching
 
-            printf("        [ta] teaching finished.\n");
+            printf("        [ta] Teaching finished.\n");
 
             sem_post(&sem_ta);  // Signal that the TA is done teaching and ready for the next student
-        }
-    }
+        }
+    }
+
+    return NULL;
+}
+
+void rand_sleep(void) {
+    int time = rand() % SLEEP_MAX + 1;
+    sleep(time);
 }
