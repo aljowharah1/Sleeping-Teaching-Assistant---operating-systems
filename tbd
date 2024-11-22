@@ -8,7 +8,7 @@
 
 #define NUM_SEATS 3
 #define SLEEP_MAX 5
-#define STUDENT_VISIT_TIMEOUT 10  // Maximum time a student will wait for the TA (in seconds)
+#define OFFICE_HOURS_DURATION 3 // Office hours duration in minutes
 
 // Semaphores and mutex
 sem_t ta_sleep;      // For waking up the TA
@@ -23,6 +23,7 @@ int next_seat = 0;
 int next_teach = 0;
 int ta_sleeping = 0;  // Flag to track if TA is sleeping
 int num_students_remaining; // Track remaining students who need help
+int office_hours_active = 1; // Flag to indicate if office hours are active
 
 void rand_sleep(void) {
     sleep(rand() % SLEEP_MAX + 1);
@@ -36,6 +37,11 @@ void* student_activity(void* arg) {
     int id = *(int*)arg;
     
     while (1) {
+        if (!office_hours_active) {
+            printf("[Student %d] Office hours are over, I can't get help anymore.\n", id);
+            break; // Exit the loop if office hours are over
+        }
+
         printf("[Student %d] Programming...\n", id);
         rand_sleep(); // Simulate programming
         
@@ -81,11 +87,6 @@ void* student_activity(void* arg) {
         
         // Simulate time between visits
         rand_sleep();
-        
-        // If no more students need help, exit the loop
-        if (num_students_remaining == 0) {
-            break;
-        }
     }
     return NULL;
 }
@@ -93,6 +94,14 @@ void* student_activity(void* arg) {
 void* ta_activity(void* arg) {
     while (1) {
         pthread_mutex_lock(&chair_mutex);
+        
+        // Check if office hours have ended
+        if (!office_hours_active && waiting_students == 0) {
+            printf("[TA] Office hours are over. No more students to help.\n");
+            pthread_mutex_unlock(&chair_mutex);
+            break; // Exit if office hours are over and there are no students left
+        }
+
         if (waiting_students == 0) {
             ta_sleeping = 1;  // Set TA as sleeping
             printf("\n[TA] All chairs empty, TA is falling asleep...\n");
@@ -126,12 +135,20 @@ void* ta_activity(void* arg) {
             }
             pthread_mutex_unlock(&chair_mutex);
         }
-        
-        // If no more students need help, exit the loop
-        if (num_students_remaining == 0) {
-            break;
-        }
     }
+    return NULL;
+}
+
+void* office_hours_activity(void* arg) {
+    // Simulate office hours duration using sleep
+    printf("[Office Hours] Office hours are starting. TA will help students for %d minutes.\n", OFFICE_HOURS_DURATION);
+    
+    // Sleep for the office hours duration (in seconds)
+    sleep(OFFICE_HOURS_DURATION * 60);
+    
+    office_hours_active = 0; // End office hours after the time period is over
+    printf("[Office Hours] Office hours are over. No more students will be accepted.\n");
+    
     return NULL;
 }
 
@@ -159,11 +176,15 @@ int main(int argc, char **argv) {
     
     // Create threads
     pthread_t ta_thread;
+    pthread_t office_hours_thread;
     pthread_t* student_threads = malloc(sizeof(pthread_t) * num_students);
     int* student_ids = malloc(sizeof(int) * num_students);
     
     // Create TA thread
     pthread_create(&ta_thread, NULL, ta_activity, NULL);
+    
+    // Create office hours thread (tracks the office hours duration)
+    pthread_create(&office_hours_thread, NULL, office_hours_activity, NULL);
     
     // Create student threads
     for (int i = 0; i < num_students; i++) {
@@ -171,10 +192,11 @@ int main(int argc, char **argv) {
         pthread_create(&student_threads[i], NULL, student_activity, &student_ids[i]);
     }
     
-    // Wait for user input to end program
-    printf("Press enter to end the program...\n");
-    getchar(); // Consume the newline from scanf
-    getchar(); // Wait for enter
+    // Wait for office hours thread to finish (i.e., wait until office hours end)
+    pthread_join(office_hours_thread, NULL);
+    
+    // Wait for TA thread to finish
+    pthread_join(ta_thread, NULL);
     
     // Cleanup
     free(student_threads);
