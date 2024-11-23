@@ -158,7 +158,7 @@ int main(int argc, char **argv) {
     scanf("%d", &num_students);
     
     if (num_students <= 0) {
-        printf("Invalid number of students\n");
+        printf("no students need help!\n");
         return 1;
     }
     
