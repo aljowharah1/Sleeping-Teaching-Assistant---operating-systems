@@ -107,7 +107,7 @@ gcc -o main main.c -lpthread
 
 ## **Known Issues**
 - Adding more than 3 seats currently requires manual adjustment of the array size and logic.
-- The TA prints that it's helping a student before they actually start getting the help , making it look like  the TA is helping another student before the one before the previous one finishes finishes
+- The TA prints that it's helping a student before they actually start getting the help , making it look like  the TA is assisting another student before the previous one finishes 
 - "took seat {0,1,2}" statement doesn't reflect the numbering of the chairs {1,2,3}
 
 Feel free to report additional issues via the Issues tab.
